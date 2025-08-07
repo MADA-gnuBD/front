@@ -1,0 +1,40 @@
+name: Deploy Front + Back to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up SSH
+      uses: webfactory/ssh-agent@v0.5.4
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+    - name: SSH into EC2 and deploy
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_HOST }} << 'EOF'
+          echo "📦 Pull latest code"
+          cd ~/MADA_server
+          git pull origin main
+
+          echo "🐳 Restart backend (Docker)"
+          docker-compose down
+          docker-compose up --build -d
+
+          echo "🌐 Deploy frontend (Next.js)"
+          cd ~/MADA_server/front
+          npm install
+          npm run build
+          
+          pm2 delete mada-frontend || true
+          pm2 start npm --name mada-frontend -- start
+        EOF
