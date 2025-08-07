@@ -19,7 +19,8 @@ const BikeStationsAPI = {
             console.log('🌐 [BikeStationsAPI] Spring 백엔드에서 따릉이 데이터 요청')
             
             // Spring 백엔드 API URL
-            const url = 'http://localhost:8080/bike-inventory/latest'
+            const springApiUrl = process.env.NEXT_PUBLIC_SPRING_API_URL || 'http://localhost:8080'
+            const url = `${springApiUrl}/bike-inventory/latest`
             
             console.log('📡 [BikeStationsAPI] 요청 URL:', url)
             
