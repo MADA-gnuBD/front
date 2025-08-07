@@ -28,160 +28,159 @@ on:
       - 'tailwind.config.ts'
       - 'tsconfig.json'
   workflow_dispatch:
-  
+
 env:
   NODE_VERSION: '18'
   NEXT_PUBLIC_SPRING_API_URL: ${{ secrets.NEXT_PUBLIC_SPRING_API_URL }}
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  SERVER_HOST: ${{ secrets.SERVER_HOST }}
 
 jobs:
-  # 테스트 및 빌드
+  # 1. 테스트 및 빌드
   test-and-build:
+    name: 🔧 Test & Build
     runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-        
-    - name: Install dependencies
-      run: npm ci
-      
-    - name: Run linting
-      run: npm run lint
-      
-    - name: Type check
-      run: npx tsc --noEmit
-      
-    - name: Build application
-      run: npm run build
-      env:
-        NEXT_PUBLIC_SPRING_API_URL: ${{ secrets.NEXT_PUBLIC_SPRING_API_URL || 'http://localhost:8080' }}
-        
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-files
-        path: .next/
-        retention-days: 1
 
-  # Docker 이미지 빌드 및 푸시
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build application
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SPRING_API_URL: ${{ env.NEXT_PUBLIC_SPRING_API_URL || 'http://localhost:8080' }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-files
+          path: .next/
+          retention-days: 1
+
+  # 2. Docker 이미지 빌드 및 푸시
   docker-build-and-push:
+    name: 🐳 Build & Push Docker Image
     needs: test-and-build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      
-    - name: Login to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-        
-    - name: Extract metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ secrets.DOCKERHUB_USERNAME }}/seoul-bike-frontend
-        tags: |
-          type=ref,event=branch
-          type=ref,event=pr
-          type=sha,prefix={{branch}}-
-          type=raw,value=latest,enable={{is_default_branch}}
-          
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        build-args: |
-          NEXT_PUBLIC_SPRING_API_URL=${{ secrets.NEXT_PUBLIC_SPRING_API_URL }}
 
-  # 배포 (선택사항 - 서버가 있는 경우)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKERHUB_USERNAME }}/seoul-bike-frontend
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=main-
+            type=raw,value=latest,enable=true
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NEXT_PUBLIC_SPRING_API_URL=${{ env.NEXT_PUBLIC_SPRING_API_URL }}
+
+  # 3. 배포 (서버에 Docker로 배포)
   deploy:
+    name: 🚀 Deploy to EC2
     needs: docker-build-and-push
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && secrets.SERVER_HOST
+    if: github.ref == 'refs/heads/main' && env.SERVER_HOST != ''
     environment: production
-    
-    steps:
-    - name: Deploy to server
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USERNAME }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        script: |
-          # 기존 컨테이너 중지 및 제거
-          docker stop seoul-bike-frontend || true
-          docker rm seoul-bike-frontend || true
-          
-          # 최신 이미지 가져오기
-          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/seoul-bike-frontend:latest
-          
-          # 새 컨테이너 실행
-          docker run -d \
-            --name seoul-bike-frontend \
-            --restart unless-stopped \
-            -p 3000:3000 \
-            -e NEXT_PUBLIC_SPRING_API_URL=${{ secrets.NEXT_PUBLIC_SPRING_API_URL }} \
-            ${{ secrets.DOCKERHUB_USERNAME }}/seoul-bike-frontend:latest
-          
-          # 오래된 이미지 정리
-          docker image prune -f
 
-  # 보안 스캔
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            docker stop seoul-bike-frontend || true
+            docker rm seoul-bike-frontend || true
+            docker pull ${{ env.DOCKERHUB_USERNAME }}/seoul-bike-frontend:latest
+            docker run -d \
+              --name seoul-bike-frontend \
+              --restart unless-stopped \
+              -p 3000:3000 \
+              -e NEXT_PUBLIC_SPRING_API_URL=${{ env.NEXT_PUBLIC_SPRING_API_URL }} \
+              ${{ env.DOCKERHUB_USERNAME }}/seoul-bike-frontend:latest
+            docker image prune -f
+
+  # 4. 보안 스캔
   security-scan:
+    name: 🛡️ Trivy Scan
     runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      with:
-        scan-type: 'fs'
-        scan-ref: '.'
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-        
-    - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      with:
-        sarif_file: 'trivy-results.sarif'
 
-  # 알림 (선택사항)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # 5. 알림
   notify:
+    name: 📢 Notify
     needs: [test-and-build, docker-build-and-push]
     runs-on: ubuntu-latest
     if: always()
-    
+
     steps:
-    - name: Notify on success
-      if: success()
-      run: |
-        echo "✅ Frontend CI/CD completed successfully!"
-        echo "🚀 Docker image built and pushed"
-        echo "📦 Build artifacts uploaded"
-        
-    - name: Notify on failure
-      if: failure()
-      run: |
-        echo "❌ Frontend CI/CD failed!"
-        echo "🔍 Check the logs for more details"
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "✅ Frontend CI/CD completed successfully!"
+          echo "🚀 Docker image built and pushed"
+          echo "📦 Build artifacts uploaded"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Frontend CI/CD failed!"
+          echo "🔍 Check the logs for more details"
