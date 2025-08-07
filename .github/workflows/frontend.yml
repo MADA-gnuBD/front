@@ -27,7 +27,8 @@ on:
       - 'next.config.mjs'
       - 'tailwind.config.ts'
       - 'tsconfig.json'
-
+  workflow_dispatch:
+  
 env:
   NODE_VERSION: '18'
   NEXT_PUBLIC_SPRING_API_URL: ${{ secrets.NEXT_PUBLIC_SPRING_API_URL }}
