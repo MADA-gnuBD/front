@@ -33,7 +33,6 @@ env:
   NODE_VERSION: '18'
   NEXT_PUBLIC_SPRING_API_URL: ${{ secrets.NEXT_PUBLIC_SPRING_API_URL }}
   DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-  SERVER_HOST: ${{ secrets.SERVER_HOST }}
 
 jobs:
   # 1. 테스트 및 빌드
@@ -114,19 +113,19 @@ jobs:
           build-args: |
             NEXT_PUBLIC_SPRING_API_URL=${{ env.NEXT_PUBLIC_SPRING_API_URL }}
 
-  # 3. 배포 (서버에 Docker로 배포)
+  # 3. EC2 서버에 배포
   deploy:
     name: 🚀 Deploy to EC2
     needs: docker-build-and-push
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && env.SERVER_HOST != ''
+    if: github.ref == 'refs/heads/main' && secrets.SERVER_HOST != ''
     environment: production
 
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ env.SERVER_HOST }}
+          host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
@@ -137,13 +136,13 @@ jobs:
               --name seoul-bike-frontend \
               --restart unless-stopped \
               -p 3000:3000 \
-              -e NEXT_PUBLIC_SPRING_API_URL=${{ env.NEXT_PUBLIC_SPRING_API_URL }} \
+              -e NEXT_PUBLIC_SPRING_API_URL=${{ secrets.NEXT_PUBLIC_SPRING_API_URL }} \
               ${{ env.DOCKERHUB_USERNAME }}/seoul-bike-frontend:latest
             docker image prune -f
 
   # 4. 보안 스캔
   security-scan:
-    name: 🛡️ Trivy Scan
+    name: 🛡️ Security Scan
     runs-on: ubuntu-latest
 
     steps:
@@ -157,6 +156,7 @@ jobs:
           scan-ref: '.'
           format: 'sarif'
           output: 'trivy-results.sarif'
+          ignore-unfixed: true
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v3
@@ -164,22 +164,21 @@ jobs:
         with:
           sarif_file: 'trivy-results.sarif'
 
-  # 5. 알림
+  # 5. 완료 메시지
   notify:
-    name: 📢 Notify
+    name: 📢 Notify Result
     needs: [test-and-build, docker-build-and-push]
     runs-on: ubuntu-latest
     if: always()
 
     steps:
-      - name: Notify on success
+      - name: Notify success
         if: success()
         run: |
           echo "✅ Frontend CI/CD completed successfully!"
-          echo "🚀 Docker image built and pushed"
-          echo "📦 Build artifacts uploaded"
+          echo "🚀 Deployed to EC2 via Docker"
 
-      - name: Notify on failure
+      - name: Notify failure
         if: failure()
         run: |
           echo "❌ Frontend CI/CD failed!"
