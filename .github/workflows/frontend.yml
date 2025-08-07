@@ -118,7 +118,7 @@ jobs:
     name: 🚀 Deploy to EC2
     needs: docker-build-and-push
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && secrets.SERVER_HOST != ''
+    if: github.ref == 'refs/heads/main'
     environment: production
 
     steps:

@@ -37,8 +37,7 @@ env:
   NODE_VERSION: '18'
   NEXT_PUBLIC_SPRING_API_URL: ${{ secrets.NEXT_PUBLIC_SPRING_API_URL }}
   DOCKER_COMPOSE_VERSION: '2.20.0'
-  DOCKERHUB_USERNAME: saehe
-  SERVER_HOST: ${{ secrets.SERVER_HOST }}
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
 jobs:
   test-and-build:
@@ -136,7 +135,7 @@ jobs:
     name: 📦 Deploy to EC2 Server
     needs: docker-compose-deploy
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && env.SERVER_HOST != ''
+    if: github.ref == 'refs/heads/main'
     environment: production
 
     steps:
