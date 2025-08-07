@@ -31,11 +31,36 @@ docker run -p 3000:3000 \
   seoul-bike-frontend
 ```
 
-### 3. 배포 확인
+### 3. Docker Hub 배포 (선택사항)
+
+#### Docker Hub 리포지토리 생성
+1. [Docker Hub](https://hub.docker.com)에서 계정 생성
+2. "Create Repository" 클릭
+3. Repository name: `seoul-bike-frontend`
+4. Visibility 선택 (Public/Private)
+
+#### 이미지 빌드 및 푸시
+```bash
+# Docker Hub 로그인
+docker login
+
+# 이미지 빌드 (Docker Hub 사용자명으로 태그)
+docker build -t [your-dockerhub-username]/seoul-bike-frontend:latest .
+
+# 이미지 푸시
+docker push [your-dockerhub-username]/seoul-bike-frontend:latest
+
+# 다른 서버에서 실행
+docker run -p 3000:3000 \
+  -e NEXT_PUBLIC_SPRING_API_URL=http://43.201.61.111:8080 \
+  [your-dockerhub-username]/seoul-bike-frontend:latest
+```
+
+### 4. 배포 확인
 - 브라우저에서 `http://localhost:3000` 접속
 - 또는 서버 IP: `http://[서버IP]:3000`
 
-### 4. 컨테이너 관리
+### 5. 컨테이너 관리
 
 ```bash
 # 실행 중인 컨테이너 확인
@@ -51,14 +76,14 @@ docker-compose logs -f
 docker-compose restart
 ```
 
-### 5. 프로덕션 배포 시 주의사항
+### 6. 프로덕션 배포 시 주의사항
 
 1. **환경 변수**: 프로덕션에서는 환경 변수를 통해 API URL을 설정하세요
 2. **포트**: 필요에 따라 포트를 변경할 수 있습니다
 3. **HTTPS**: 프로덕션에서는 HTTPS를 사용하는 것을 권장합니다
 4. **로드 밸런서**: 트래픽이 많을 경우 로드 밸런서 사용을 고려하세요
 
-### 6. 문제 해결
+### 7. 문제 해결
 
 #### 빌드 오류가 발생하는 경우:
 ```bash
