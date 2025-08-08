@@ -206,7 +206,7 @@ jobs:
         if: success()
         run: |
           echo "✅ Docker Compose CI/CD completed successfully!"
-          echo "🚀 Deployed via docker-compose"
+                     echo "🚀 Deployed via docker compose"
           echo "👤 User: ${{ env.DOCKERHUB_USERNAME }}"
 
       - name: Notify failure
