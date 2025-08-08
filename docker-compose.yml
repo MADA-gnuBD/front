@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   frontend:
     image: saehe/seoul-bike-frontend:latest
