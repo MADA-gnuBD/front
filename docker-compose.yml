@@ -1,6 +1,6 @@
 services:
   frontend:
-    image: saehe/seoul-bike-frontend:latest
+    image: saehe/seoul-bike-frontend
     build:
       context: .
       dockerfile: Dockerfile
