@@ -136,14 +136,22 @@ jobs:
           export DOCKER_IMAGE_NAME=${{ env.DOCKERHUB_USERNAME }}/seoul-bike-frontend
           export DOCKER_IMAGE_TAG=$(echo $GITHUB_SHA | cut -c1-7)
 
-          echo "📥 Pulling latest image from Docker Hub..."
-          docker pull $DOCKER_IMAGE_NAME:latest
-
-          echo "🏷️ Tagging images..."
-          docker tag $DOCKER_IMAGE_NAME:latest $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
-
-          echo "📤 Pushing tagged image to Docker Hub..."
-          docker push $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
+          echo "🔍 Checking if image exists..."
+          if docker pull $DOCKER_IMAGE_NAME:latest > /dev/null 2>&1; then
+            echo "✅ Image found, pulling latest..."
+            docker pull $DOCKER_IMAGE_NAME:latest
+            
+            echo "🏷️ Tagging images..."
+            docker tag $DOCKER_IMAGE_NAME:latest $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
+            
+            echo "📤 Pushing tagged image to Docker Hub..."
+            docker push $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
+            
+            echo "✅ Image processing completed!"
+          else
+            echo "⚠️ Image not found, skipping..."
+            echo "ℹ️ Please build the image first"
+          fi
 
   deploy-with-compose:
     name: 📦 Deploy to EC2 Server
