@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Brain, Route, MapPin, Clock, TrendingUp, Zap } from "lucide-react"
+import { Brain, Router, MapPin, Clock, TrendingUp, Zap } from "lucide-react"
 import type { BikeStation } from "@/lib/bike-api"
 import { calculateDistance, formatDistance } from "@/lib/utils"
 
@@ -254,7 +254,7 @@ export function AIRouteOptimizer({ selectedStation, stations, userLocation }: AI
 
                         <div className="grid grid-cols-3 gap-4 text-sm">
                           <div className="flex items-center gap-2">
-                            <Route className="w-4 h-4 text-blue-600" />
+                            <Router className="w-4 h-4 text-blue-600" />
                             <span>{formatDistance(route.totalDistance)}</span>
                           </div>
                           <div className="flex items-center gap-2">
@@ -271,7 +271,7 @@ export function AIRouteOptimizer({ selectedStation, stations, userLocation }: AI
                           size="sm"
                           className="w-full mt-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white"
                         >
-                          <Route className="w-4 h-4 mr-2" />이 경로로 이동
+                          <Router className="w-4 h-4 mr-2" />이 경로로 이동
                         </Button>
                       </CardContent>
                     </Card>
@@ -280,7 +280,7 @@ export function AIRouteOptimizer({ selectedStation, stations, userLocation }: AI
 
                 {optimizedRoutes.length === 0 && (
                   <div className="text-center py-8">
-                    <Route className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <Router className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-gray-600 mb-2">추천할 경로가 없습니다</h3>
                     <p className="text-gray-500">현재 재고 부족 대여소가 없거나 모든 대여소가 정상 상태입니다.</p>
                   </div>
