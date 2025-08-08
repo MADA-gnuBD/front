@@ -122,7 +122,20 @@ jobs:
     continue-on-error: true
 
     steps:
+      - name: Check if server secrets are configured
+        id: check-secrets
+        run: |
+          if [ -n "${{ secrets.SERVER_HOST }}" ] && [ -n "${{ secrets.SERVER_USERNAME }}" ] && [ -n "${{ secrets.SERVER_SSH_KEY }}" ]; then
+            echo "server_configured=true" >> $GITHUB_OUTPUT
+            echo "✅ Server secrets configured"
+          else
+            echo "server_configured=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Server deployment secrets not configured. Skipping deployment."
+            echo "ℹ️ Docker image built and pushed successfully: ${{ env.DOCKERHUB_USERNAME }}/seoul-bike-frontend:latest"
+          fi
+
       - name: Deploy via SSH
+        if: steps.check-secrets.outputs.server_configured == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -139,6 +152,14 @@ jobs:
               -e NEXT_PUBLIC_SPRING_API_URL=${{ secrets.NEXT_PUBLIC_SPRING_API_URL }} \
               ${{ env.DOCKERHUB_USERNAME }}/seoul-bike-frontend:latest
             docker image prune -f
+
+      - name: Skip deployment
+        if: steps.check-secrets.outputs.server_configured == 'false'
+        run: |
+          echo "ℹ️ Server deployment skipped - secrets not configured"
+          echo "✅ Docker image built and pushed successfully"
+          echo "🔗 Image: ${{ env.DOCKERHUB_USERNAME }}/seoul-bike-frontend:latest"
+          echo "💡 To enable server deployment, configure SERVER_HOST, SERVER_USERNAME, and SERVER_SSH_KEY secrets"
 
   # 4. 보안 스캔
   security-scan:
