@@ -84,7 +84,19 @@ jobs:
     continue-on-error: true
 
     steps:
+      - name: Check server secrets
+        id: check-secrets
+        run: |
+          if [ -n "${{ secrets.SERVER_HOST }}" ] && [ -n "${{ secrets.SERVER_USERNAME }}" ] && [ -n "${{ secrets.SERVER_SSH_KEY }}" ]; then
+            echo "server_configured=true" >> $GITHUB_OUTPUT
+            echo "✅ Server secrets configured"
+          else
+            echo "server_configured=false" >> $GITHUB_OUTPUT
+            echo "⚠️ SERVER_HOST / SERVER_USERNAME / SERVER_SSH_KEY 미설정. 배포 스킵"
+          fi
+
       - name: Deploy to server via SSH
+        if: steps.check-secrets.outputs.server_configured == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -100,6 +112,13 @@ jobs:
             docker compose logs --tail=50
             docker image prune -f
             echo "✅ Deployment completed successfully"
+
+      - name: Skip deployment
+        if: steps.check-secrets.outputs.server_configured == 'false'
+        run: |
+          echo "ℹ️ Server deployment skipped - secrets not configured"
+          echo "✅ Test and build completed successfully"
+          echo "🔗 Docker Hub image: saehe/seoul-bike-frontend:latest"
 
   security-scan:
     name: 🛡️ Security Scan
