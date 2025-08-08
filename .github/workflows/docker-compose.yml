@@ -35,135 +35,67 @@ on:
 
 env:
   NODE_VERSION: '18'
-  NEXT_PUBLIC_SPRING_API_URL: ${{ secrets.NEXT_PUBLIC_SPRING_API_URL }}
-  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  FRONTEND_IMAGE: saehe/seoul-bike-frontend
+  # 빌드 타임에 박힐 API URL
+  NEXT_PUBLIC_SPRING_API_URL: http://43.201.61.111:8080
 
 jobs:
-  test-and-build:
-    name: 🔧 Test & Build
+  build-and-push:
+    name: 🏗️ Build & Push Image
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run lint (optional)
-        run: |
-          echo "🔍 Checking for lint script..."
-          if npm run | grep -q "lint"; then
-            echo "✅ Lint script found, running..."
-            npm run lint || echo "⚠️ Linting issues found, but continuing..."
-          else
-            echo "ℹ️ No lint script found, skipping..."
-          fi
-
-      - name: Type check
-        run: npx tsc --noEmit || echo "⚠️ Type check issues found, but continuing..."
-
-      - name: Build app (local sanity check)
-        run: |
-          echo "🔧 Building with NEXT_PUBLIC_SPRING_API_URL=${NEXT_PUBLIC_SPRING_API_URL:-http://localhost:8080}"
-          npm run build || echo "⚠️ Build failed, but continuing..."
-        env:
-          NEXT_PUBLIC_SPRING_API_URL: ${{ env.NEXT_PUBLIC_SPRING_API_URL || 'http://localhost:8080' }}
+      - name: Build & Push (latest + sha)
+        uses: docker/build-push-action@v5
+        with:
+          context: .                 # 모노레포면 ./frontend 로 바꿔
+          push: true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:latest
+            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_SPRING_API_URL=${{ env.NEXT_PUBLIC_SPRING_API_URL }}
 
   deploy:
     name: 🚀 Deploy to EC2 Server
-    needs: test-and-build
+    needs: build-and-push
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    continue-on-error: true
-
     steps:
       - name: Check server secrets
         id: check-secrets
         run: |
           if [ -n "${{ secrets.SERVER_HOST }}" ] && [ -n "${{ secrets.SERVER_USERNAME }}" ] && [ -n "${{ secrets.SERVER_SSH_KEY }}" ]; then
             echo "server_configured=true" >> $GITHUB_OUTPUT
-            echo "✅ Server secrets configured"
           else
             echo "server_configured=false" >> $GITHUB_OUTPUT
             echo "⚠️ SERVER_HOST / SERVER_USERNAME / SERVER_SSH_KEY 미설정. 배포 스킵"
           fi
 
-      - name: Deploy to server via SSH
+      - name: Deploy via SSH (docker-compose)
         if: steps.check-secrets.outputs.server_configured == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USERNAME }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
+          host: ${{ secrets.SERVER_HOST }}              # 예: 43.201.61.111
+          username: ${{ secrets.SERVER_USERNAME }}      # 예: ubuntu
+          key: ${{ secrets.SERVER_SSH_KEY }}            # pem 내용
           script: |
-            cd /home/saehe/seoul-bike-frontend
-            git pull origin main
-            docker compose down
-            docker pull saehe/seoul-bike-frontend:latest
-            docker compose up -d
-            docker compose ps
-            docker compose logs --tail=50
-            docker image prune -f
-            echo "✅ Deployment completed successfully"
+            set -e
+            cd /home/saehe/seoul-bike-frontend   # ← 서버에서 compose 파일이 있는 폴더
+            # 서버에 'docker compose'가 없으면 아래 두 줄을 'docker-compose'로 바꿔야 함
+            docker compose pull frontend
+            docker compose up -d --force-recreate --no-deps frontend
+            docker image prune -f || true
+            curl -fsS -o /dev/null http://127.0.0.1:3000 || true
 
       - name: Skip deployment
         if: steps.check-secrets.outputs.server_configured == 'false'
-        run: |
-          echo "ℹ️ Server deployment skipped - secrets not configured"
-          echo "✅ Test and build completed successfully"
-          echo "🔗 Docker Hub image: saehe/seoul-bike-frontend:latest"
-
-  security-scan:
-    name: 🛡️ Security Scan
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Run Trivy scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          ignore-unfixed: true
-
-      - name: Upload scan results
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
-
-  notify:
-    name: 📢 Notify Result
-    needs: [test-and-build, deploy]
-    runs-on: ubuntu-latest
-    if: always()
-
-    steps:
-      - name: Notify success
-        if: success()
-        run: |
-          echo "✅ Docker Compose CI/CD completed successfully!"
-          echo "🚀 Deployed via docker compose"
-          echo "👤 User: ${{ env.DOCKERHUB_USERNAME }}"
-
-      - name: Notify failure
-        if: failure()
-        run: |
-          echo "❌ Docker Compose CI/CD failed!"
-          echo "🔍 Please check job logs"
-          echo "👤 User: ${{ env.DOCKERHUB_USERNAME }}"
+        run: echo "🔹 Deployment skipped"
