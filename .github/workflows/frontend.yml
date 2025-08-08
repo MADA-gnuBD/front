@@ -56,7 +56,9 @@ jobs:
         run: npm ci
 
       - name: Run linting
-        run: npm run lint || true  # 필요하면 실패 허용 제거
+        run: |
+          echo "🔍 Running ESLint..."
+          npx eslint . --ext .js,.jsx,.ts,.tsx || echo "⚠️ Linting issues found, but continuing..."
 
       - name: Type check
         run: npx tsc --noEmit || true  # 필요하면 실패 허용 제거
@@ -64,10 +66,10 @@ jobs:
       # 로컬 빌드는 선택. 도커에서 어차피 다시 빌드하므로 캐치용으로만 둠
       - name: Build (local check)
         run: |
-          echo "NEXT_PUBLIC_SPRING_API_URL=${NEXT_PUBLIC_SPRING_API_URL:-http://localhost:8080}"
-          NEXT_PUBLIC_SPRING_API_URL="${NEXT_PUBLIC_SPRING_API_URL:-http://localhost:8080}" npm run build
+          echo "🔧 Building with NEXT_PUBLIC_SPRING_API_URL=${NEXT_PUBLIC_SPRING_API_URL:-http://localhost:8080}"
+          npm run build || echo "⚠️ Local build failed, but continuing with Docker build..."
         env:
-          NEXT_PUBLIC_SPRING_API_URL: ${{ env.NEXT_PUBLIC_SPRING_API_URL }}
+          NEXT_PUBLIC_SPRING_API_URL: ${{ env.NEXT_PUBLIC_SPRING_API_URL || 'http://localhost:8080' }}
 
   docker-build-and-push:
     name: 🐳 Build & Push Docker Image
@@ -107,7 +109,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            NEXT_PUBLIC_SPRING_API_URL=${{ env.NEXT_PUBLIC_SPRING_API_URL != '' && env.NEXT_PUBLIC_SPRING_API_URL || 'http://localhost:8080' }}
+            NEXT_PUBLIC_SPRING_API_URL=${{ env.NEXT_PUBLIC_SPRING_API_URL || 'http://localhost:8080' }}
 
   deploy:
     name: 🚀 Deploy to EC2
