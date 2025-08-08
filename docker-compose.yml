@@ -1,17 +1,9 @@
 services:
   frontend:
-    # ✅ 로컬 태그가 아닌 Docker Hub 풀네임 사용
-    image: ${DOCKER_IMAGE_NAME:-saehe/seoul-bike-frontend}:${IMAGE_TAG:-latest}
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        # ✅ 빌드 타임에만 필요
-        NEXT_PUBLIC_SPRING_API_URL: ${NEXT_PUBLIC_SPRING_API_URL}
+    image: saehe/seoul-bike-frontend:latest
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      # SSR에서만 필요하면 여기에 남기고, 클라에서만 쓰면 빌드 args로만 유지
-      # - NEXT_PUBLIC_SPRING_API_URL=${NEXT_PUBLIC_SPRING_API_URL}
+      - NEXT_PUBLIC_SPRING_API_URL=http://43.201.61.111:8080
     restart: unless-stopped

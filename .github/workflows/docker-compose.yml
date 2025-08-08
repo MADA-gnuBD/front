@@ -35,16 +35,12 @@ on:
 
 env:
   NODE_VERSION: '18'
-  # ✅ 시크릿에서 가져와 빌드 args로 전달
   NEXT_PUBLIC_SPRING_API_URL: ${{ secrets.NEXT_PUBLIC_SPRING_API_URL }}
   DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-  # ✅ 이미지 풀네임/태그를 전역으로 고정
-  DOCKER_IMAGE_NAME: saehe/seoul-bike-frontend
-  IMAGE_TAG: latest
 
 jobs:
   test-and-build:
-    name: "🔧 Test & Build"
+    name: 🔧 Test & Build
     runs-on: ubuntu-latest
 
     steps:
@@ -74,59 +70,18 @@ jobs:
         run: npx tsc --noEmit || echo "⚠️ Type check issues found, but continuing..."
 
       - name: Build app (local sanity check)
-        env:
-          NEXT_PUBLIC_SPRING_API_URL: ${{ env.NEXT_PUBLIC_SPRING_API_URL }}
         run: |
           echo "🔧 Building with NEXT_PUBLIC_SPRING_API_URL=${NEXT_PUBLIC_SPRING_API_URL:-http://localhost:8080}"
-          NEXT_PUBLIC_SPRING_API_URL="${NEXT_PUBLIC_SPRING_API_URL:-http://localhost:8080}" npm run build || echo "⚠️ Build failed, but continuing..."
+          npm run build || echo "⚠️ Build failed, but continuing..."
+        env:
+          NEXT_PUBLIC_SPRING_API_URL: ${{ env.NEXT_PUBLIC_SPRING_API_URL || 'http://localhost:8080' }}
 
-  docker-compose-build-and-push:
-    name: "🐳 Docker Compose Build & Push"
+  deploy:
+    name: 🚀 Deploy to EC2 Server
     needs: test-and-build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      # ✅ compose가 buildx를 사용해 빌드. 이미지 이름/태그는 compose의 image 필드로 결정됨
-      - name: Build images (compose)
-        env:
-          DOCKER_IMAGE_NAME: ${{ env.DOCKER_IMAGE_NAME }}
-          IMAGE_TAG: ${{ env.IMAGE_TAG }}
-          NEXT_PUBLIC_SPRING_API_URL: ${{ env.NEXT_PUBLIC_SPRING_API_URL }}
-        run: |
-          set -e
-          echo "🐳 Building ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
-          docker compose build --no-cache
-          echo "📋 Local images:"
-          docker images | grep -E "(seoul-bike|frontend)" || true
-
-      - name: Push images (compose)
-        env:
-          DOCKER_IMAGE_NAME: ${{ env.DOCKER_IMAGE_NAME }}
-          IMAGE_TAG: ${{ env.IMAGE_TAG }}
-        run: |
-          set -e
-          echo "🚀 Pushing ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
-          docker compose push
-
-  deploy-with-compose:
-    name: "📦 Deploy to EC2 Server"
-    needs: docker-compose-build-and-push
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    environment: production
+    continue-on-error: true
 
     steps:
       - name: Deploy to server via SSH
@@ -136,17 +91,10 @@ jobs:
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            set -e
             cd /home/saehe/seoul-bike-frontend
-            # 서버 쪽 compose도 같은 이미지 풀네임/태그를 사용하도록 .env 또는 환경변수 설정되어 있어야 함
-            export DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME:-saehe/seoul-bike-frontend}"
-            export IMAGE_TAG="${IMAGE_TAG:-latest}"
-            export NEXT_PUBLIC_SPRING_API_URL="${NEXT_PUBLIC_SPRING_API_URL:-${NEXT_PUBLIC_SPRING_API_URL}}"
-
-            echo "🐳 Pulling ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
-            docker pull ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}
-
+            git pull origin main
             docker compose down
+            docker pull saehe/seoul-bike-frontend:latest
             docker compose up -d
             docker compose ps
             docker compose logs --tail=50
@@ -154,7 +102,7 @@ jobs:
             echo "✅ Deployment completed successfully"
 
   security-scan:
-    name: "🛡️ Security Scan"
+    name: 🛡️ Security Scan
     runs-on: ubuntu-latest
     permissions:
       security-events: write
@@ -171,3 +119,32 @@ jobs:
           scan-type: 'fs'
           scan-ref: '.'
           format: 'sarif'
+          output: 'trivy-results.sarif'
+          ignore-unfixed: true
+
+      - name: Upload scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  notify:
+    name: 📢 Notify Result
+    needs: [test-and-build, deploy]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Notify success
+        if: success()
+        run: |
+          echo "✅ Docker Compose CI/CD completed successfully!"
+          echo "🚀 Deployed via docker compose"
+          echo "👤 User: ${{ env.DOCKERHUB_USERNAME }}"
+
+      - name: Notify failure
+        if: failure()
+        run: |
+          echo "❌ Docker Compose CI/CD failed!"
+          echo "🔍 Please check job logs"
+          echo "👤 User: ${{ env.DOCKERHUB_USERNAME }}"
