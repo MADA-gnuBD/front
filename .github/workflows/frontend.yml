@@ -28,16 +28,13 @@ env:
   NODE_VERSION: '18'
   DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
   DOCKERHUB_TOKEN:    ${{ secrets.DOCKERHUB_TOKEN }}
-  # Docker build context (루트가 아닌 폴더면 ./front 처럼 바꿔)
-  FRONTEND_CONTEXT: '.'
-  # 빌드 타임에 JS 번들에 박힐 백엔드 API URL
+  FRONTEND_CONTEXT: '.'   # Dockerfile이 리포 루트가 아니면 경로 수정 (예: ./front)
   NEXT_PUBLIC_SPRING_API_URL: ${{ secrets.NEXT_PUBLIC_SPRING_API_URL }}
-  # 최종 푸시될 이미지 이름
   FRONTEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/seoul-bike-frontend
 
 jobs:
   test-and-build:
-    name: 🔧 Lint & Typecheck (non-blocking)
+    name: Lint & Typecheck (non-blocking)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,20 +48,20 @@ jobs:
         run: npm ci
 
       - name: ESLint
-        run: npx eslint . --ext .js,.jsx,.ts,.tsx || echo "⚠️ ESLint issues (non-blocking)"
+        run: npx eslint . --ext .js,.jsx,.ts,.tsx || echo "ESLint issues (non-blocking)"
 
       - name: Type check
-        run: npx tsc --noEmit || echo "⚠️ TS issues (non-blocking)"
+        run: npx tsc --noEmit || echo "TS issues (non-blocking)"
 
       - name: Local build smoke
         env:
           NEXT_PUBLIC_SPRING_API_URL: ${{ env.NEXT_PUBLIC_SPRING_API_URL }}
         run: |
           echo "Using NEXT_PUBLIC_SPRING_API_URL=${NEXT_PUBLIC_SPRING_API_URL}"
-          npm run build || echo "⚠️ Local build failed (non-blocking). Docker build will proceed."
+          npm run build || echo "Local build failed (non-blocking). Proceeding to Docker build."
 
   docker-build-and-push:
-    name: 🐳 Build & Push Docker image
+    name: Build & Push Docker image
     needs: test-and-build
     runs-on: ubuntu-latest
     steps:
@@ -92,7 +89,7 @@ jobs:
             NEXT_PUBLIC_SPRING_API_URL=${{ env.NEXT_PUBLIC_SPRING_API_URL }}
 
   deploy:
-    name: 🚀 Deploy to EC2 (docker-compose)
+    name: Deploy to EC2 (docker-compose)
     needs: docker-build-and-push
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -101,23 +98,21 @@ jobs:
         id: check
         run: |
           ok=1
-          [ -z "${{ secrets.SERVER_HOST }}" ] && echo "❌ SERVER_HOST missing" && ok=0
-          [ -z "${{ secrets.SERVER_USERNAME }}" ] && echo "❌ SERVER_USERNAME missing" && ok=0
-          [ -z "${{ secrets.SERVER_SSH_KEY }}" ] && echo "❌ SERVER_SSH_KEY missing" && ok=0
+          [ -z "${{ secrets.SERVER_HOST }}" ] && echo "SERVER_HOST missing" && ok=0
+          [ -z "${{ secrets.SERVER_USERNAME }}" ] && echo "SERVER_USERNAME missing" && ok=0
+          [ -z "${{ secrets.SERVER_SSH_KEY }}" ] && echo "SERVER_SSH_KEY missing" && ok=0
           if [ "$ok" = "1" ]; then echo "server_configured=true"  >> $GITHUB_OUTPUT; else echo "server_configured=false" >> $GITHUB_OUTPUT; fi
 
-      - name: Deploy via SSH
+      - name: Deploy via SSH (compose)
         if: steps.check.outputs.server_configured == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host:     ${{ secrets.SERVER_HOST }}      # e.g. 52.78.191.110
           username: ${{ secrets.SERVER_USERNAME }}  # e.g. ubuntu
-          key:      ${{ secrets.SERVER_SSH_KEY }}   # pem 내용
-          port:     ${{ secrets.SERVER_PORT || 22 }}
+          key:      ${{ secrets.SERVER_SSH_KEY }}   # pem 내용 전체
           script: |
             set -e
             cd ~/app
-            # 프론트만 롤링 업데이트 (compose 사용)
             docker-compose pull frontend
             docker-compose up -d --force-recreate --no-deps frontend
             docker image prune -f || true
@@ -126,4 +121,4 @@ jobs:
 
       - name: Skip (no server secrets)
         if: steps.check.outputs.server_configured != 'true'
-        run: echo "ℹ️ Deployment skipped: server secrets not configured."
+        run: echo "Deployment skipped: server secrets not configured."
