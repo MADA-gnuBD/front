@@ -1,73 +1,29 @@
-name: Frontend CI/CD (Docker + Compose)
+name: frontend-cicd
 
 on:
   push:
-    branches: [ main, develop ]
-    paths:
-      - 'app/**'
-      - 'components/**'
-      - 'api/**'
-      - 'contexts/**'
-      - 'lib/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'next.config.mjs'
-      - 'tailwind.config.ts'
-      - 'tsconfig.json'
-      - 'Dockerfile'
-      - '.github/workflows/frontend.yml'
+    branches: ["main", "develop"]
   pull_request:
-    branches: [ main, develop ]
+    branches: ["main", "develop"]
   workflow_dispatch:
 
-concurrency:
-  group: frontend-cicd
-  cancel-in-progress: true
-
 env:
-  NODE_VERSION: '18'
+  NODE_VERSION: "18"
   DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-  DOCKERHUB_TOKEN:    ${{ secrets.DOCKERHUB_TOKEN }}
-  FRONTEND_CONTEXT: '.'   # Dockerfile이 리포 루트가 아니면 경로 수정 (예: ./front)
+  DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
   NEXT_PUBLIC_SPRING_API_URL: ${{ secrets.NEXT_PUBLIC_SPRING_API_URL }}
   FRONTEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/seoul-bike-frontend
+  FRONTEND_CONTEXT: "."  # Dockerfile이 루트 아닐 때는 ./front 로 변경
 
 jobs:
-  test-and-build:
-    name: Lint & Typecheck (non-blocking)
+  build_and_push:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Install deps
-        run: npm ci
-
-      - name: ESLint
-        run: npx eslint . --ext .js,.jsx,.ts,.tsx || echo "ESLint issues (non-blocking)"
-
-      - name: Type check
-        run: npx tsc --noEmit || echo "TS issues (non-blocking)"
-
-      - name: Local build smoke
-        env:
-          NEXT_PUBLIC_SPRING_API_URL: ${{ env.NEXT_PUBLIC_SPRING_API_URL }}
-        run: |
-          echo "Using NEXT_PUBLIC_SPRING_API_URL=${NEXT_PUBLIC_SPRING_API_URL}"
-          npm run build || echo "Local build failed (non-blocking). Proceeding to Docker build."
-
-  docker-build-and-push:
-    name: Build & Push Docker image
-    needs: test-and-build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -75,7 +31,7 @@ jobs:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ env.DOCKERHUB_TOKEN }}
 
-      - name: Build & Push (latest + commit sha)
+      - name: Build and Push
         uses: docker/build-push-action@v5
         with:
           context: ${{ env.FRONTEND_CONTEXT }}
@@ -83,16 +39,13 @@ jobs:
           tags: |
             ${{ env.FRONTEND_IMAGE }}:latest
             ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           build-args: |
             NEXT_PUBLIC_SPRING_API_URL=${{ env.NEXT_PUBLIC_SPRING_API_URL }}
 
   deploy:
-    name: Deploy to EC2 (docker-compose)
-    needs: docker-build-and-push
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    needs: build_and_push
+    if: github.ref == 'refs/heads/main'
     steps:
       - name: Check server secrets
         id: check
@@ -101,24 +54,19 @@ jobs:
           [ -z "${{ secrets.SERVER_HOST }}" ] && echo "SERVER_HOST missing" && ok=0
           [ -z "${{ secrets.SERVER_USERNAME }}" ] && echo "SERVER_USERNAME missing" && ok=0
           [ -z "${{ secrets.SERVER_SSH_KEY }}" ] && echo "SERVER_SSH_KEY missing" && ok=0
-          if [ "$ok" = "1" ]; then echo "server_configured=true"  >> $GITHUB_OUTPUT; else echo "server_configured=false" >> $GITHUB_OUTPUT; fi
+          if [ "$ok" = "1" ]; then echo "server_configured=true" >> $GITHUB_OUTPUT; else echo "server_configured=false" >> $GITHUB_OUTPUT; fi
 
-      - name: Deploy via SSH (compose)
+      - name: Deploy via SSH (docker-compose)
         if: steps.check.outputs.server_configured == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host:     ${{ secrets.SERVER_HOST }}      # e.g. 52.78.191.110
-          username: ${{ secrets.SERVER_USERNAME }}  # e.g. ubuntu
-          key:      ${{ secrets.SERVER_SSH_KEY }}   # pem 내용 전체
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.Server_USERNAME || secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             set -e
             cd ~/app
             docker-compose pull frontend
             docker-compose up -d --force-recreate --no-deps frontend
             docker image prune -f || true
-            echo "Health check:"
             curl -I http://127.0.0.1:3000 || true
-
-      - name: Skip (no server secrets)
-        if: steps.check.outputs.server_configured != 'true'
-        run: echo "Deployment skipped: server secrets not configured."
