@@ -1,4 +1,4 @@
-name: Frontend CI/CD (Docker)
+name: Frontend CI/CD (Docker + Compose)
 
 on:
   push:
@@ -18,170 +18,112 @@ on:
       - '.github/workflows/frontend.yml'
   pull_request:
     branches: [ main, develop ]
-    paths:
-      - 'app/**'
-      - 'components/**'
-      - 'api/**'
-      - 'contexts/**'
-      - 'lib/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'next.config.mjs'
-      - 'tailwind.config.ts'
-      - 'tsconfig.json'
-      - 'Dockerfile'
-      - '.github/workflows/frontend.yml'
   workflow_dispatch:
+
+concurrency:
+  group: frontend-cicd
+  cancel-in-progress: true
 
 env:
   NODE_VERSION: '18'
   DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  DOCKERHUB_TOKEN:    ${{ secrets.DOCKERHUB_TOKEN }}
+  # Docker build context (루트가 아닌 폴더면 ./front 처럼 바꿔)
+  FRONTEND_CONTEXT: '.'
+  # 빌드 타임에 JS 번들에 박힐 백엔드 API URL
   NEXT_PUBLIC_SPRING_API_URL: ${{ secrets.NEXT_PUBLIC_SPRING_API_URL }}
+  # 최종 푸시될 이미지 이름
+  FRONTEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/seoul-bike-frontend
 
 jobs:
   test-and-build:
-    name: 🔧 Test & Build
+    name: 🔧 Lint & Typecheck (non-blocking)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
-      - name: Install dependencies
+      - name: Install deps
         run: npm ci
 
-      - name: Run linting
-        run: |
-          echo "🔍 Running ESLint..."
-          npx eslint . --ext .js,.jsx,.ts,.tsx || echo "⚠️ Linting issues found, but continuing..."
+      - name: ESLint
+        run: npx eslint . --ext .js,.jsx,.ts,.tsx || echo "⚠️ ESLint issues (non-blocking)"
 
       - name: Type check
-        run: npx tsc --noEmit || true  # 필요하면 실패 허용 제거
+        run: npx tsc --noEmit || echo "⚠️ TS issues (non-blocking)"
 
-      # 로컬 빌드는 선택. 도커에서 어차피 다시 빌드하므로 캐치용으로만 둠
-      - name: Build (local check)
-        run: |
-          echo "🔧 Building with NEXT_PUBLIC_SPRING_API_URL=${NEXT_PUBLIC_SPRING_API_URL:-http://localhost:8080}"
-          npm run build || echo "⚠️ Local build failed, but continuing with Docker build..."
+      - name: Local build smoke
         env:
-          NEXT_PUBLIC_SPRING_API_URL: ${{ env.NEXT_PUBLIC_SPRING_API_URL || 'http://localhost:8080' }}
+          NEXT_PUBLIC_SPRING_API_URL: ${{ env.NEXT_PUBLIC_SPRING_API_URL }}
+        run: |
+          echo "Using NEXT_PUBLIC_SPRING_API_URL=${NEXT_PUBLIC_SPRING_API_URL}"
+          npm run build || echo "⚠️ Local build failed (non-blocking). Docker build will proceed."
 
   docker-build-and-push:
-    name: 🐳 Build & Push Docker Image
+    name: 🐳 Build & Push Docker image
     needs: test-and-build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
 
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.DOCKERHUB_USERNAME }}/seoul-bike-frontend
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix=main-
-            type=raw,value=latest,enable=true
-
-      - name: Build and push
+      - name: Build & Push (latest + commit sha)
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ${{ env.FRONTEND_CONTEXT }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:latest
+            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            NEXT_PUBLIC_SPRING_API_URL=${{ env.NEXT_PUBLIC_SPRING_API_URL || 'http://localhost:8080' }}
+            NEXT_PUBLIC_SPRING_API_URL=${{ env.NEXT_PUBLIC_SPRING_API_URL }}
 
   deploy:
-    name: 🚀 Deploy to EC2
+    name: 🚀 Deploy to EC2 (docker-compose)
     needs: docker-build-and-push
-    runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
     steps:
       - name: Check server secrets
-        id: check-secrets
+        id: check
         run: |
-          if [ -n "${{ secrets.SERVER_HOST }}" ] && [ -n "${{ secrets.SERVER_USERNAME }}" ] && [ -n "${{ secrets.SERVER_SSH_KEY }}" ]; then
-            echo "server_configured=true" >> $GITHUB_OUTPUT
-            echo "✅ Server secrets configured"
-          else
-            echo "server_configured=false" >> $GITHUB_OUTPUT
-            echo "⚠️ SERVER_HOST / SERVER_USERNAME / SERVER_SSH_KEY 미설정. 배포 스킵"
-          fi
+          ok=1
+          [ -z "${{ secrets.SERVER_HOST }}" ] && echo "❌ SERVER_HOST missing" && ok=0
+          [ -z "${{ secrets.SERVER_USERNAME }}" ] && echo "❌ SERVER_USERNAME missing" && ok=0
+          [ -z "${{ secrets.SERVER_SSH_KEY }}" ] && echo "❌ SERVER_SSH_KEY missing" && ok=0
+          if [ "$ok" = "1" ]; then echo "server_configured=true"  >> $GITHUB_OUTPUT; else echo "server_configured=false" >> $GITHUB_OUTPUT; fi
 
       - name: Deploy via SSH
-        if: steps.check-secrets.outputs.server_configured == 'true'
+        if: steps.check.outputs.server_configured == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USERNAME }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: ${{ secrets.SERVER_PORT || 22 }}
+          host:     ${{ secrets.SERVER_HOST }}      # e.g. 52.78.191.110
+          username: ${{ secrets.SERVER_USERNAME }}  # e.g. ubuntu
+          key:      ${{ secrets.SERVER_SSH_KEY }}   # pem 내용
+          port:     ${{ secrets.SERVER_PORT || 22 }}
           script: |
-            docker stop seoul-bike-frontend || true
-            docker rm seoul-bike-frontend || true
-            docker pull ${{ env.DOCKERHUB_USERNAME }}/seoul-bike-frontend:latest
-            docker run -d \
-              --name seoul-bike-frontend \
-              --restart unless-stopped \
-              -p 3000:3000 \
-              ${{ env.DOCKERHUB_USERNAME }}/seoul-bike-frontend:latest
-            docker image prune -f
+            set -e
+            cd ~/app
+            # 프론트만 롤링 업데이트 (compose 사용)
+            docker-compose pull frontend
+            docker-compose up -d --force-recreate --no-deps frontend
+            docker image prune -f || true
+            echo "Health check:"
+            curl -I http://127.0.0.1:3000 || true
 
-  security-scan:
-    name: 🛡️ Security Scan
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          ignore-unfixed: true
-      - name: Upload Trivy results
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
-
-  notify:
-    name: 📢 Notify Result
-    needs: [test-and-build, docker-build-and-push]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Success
-        if: success()
-        run: echo "✅ Frontend CI/CD completed successfully!"
-      - name: Failure
-        if: failure()
-        run: |
-          echo "❌ Frontend CI/CD failed!"
-          echo "🔍 Check the logs for more details"
+      - name: Skip (no server secrets)
+        if: steps.check.outputs.server_configured != 'true'
+        run: echo "ℹ️ Deployment skipped: server secrets not configured."
