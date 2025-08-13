@@ -115,7 +115,7 @@ export default function AuthPage() {
             </div>
           </Link>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            따릉이 시스템
+            VeloNext
           </h1>
           <p className="text-gray-600 mt-2">관리 시스템 및 커뮤니티에 오신 것을 환영합니다</p>
         </div>
@@ -284,7 +284,7 @@ export default function AuthPage() {
 
         {/* Footer */}
         <div className="text-center text-sm text-gray-600">
-          <p>© 2024 따릉이 관리 시스템. All rights reserved.</p>
+          <p>© 2024 VeloNext. All rights reserved.</p>
         </div>
       </div>
     </div>

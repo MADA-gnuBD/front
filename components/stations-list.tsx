@@ -30,7 +30,7 @@ export function StationsList({ stations, userLocation, onStationSelect, stations
               <List className="w-4 h-4 text-white" />
             </div>
             <div>
-              <span className="text-lg">따릉이 대여소</span>
+              <span className="text-lg">VeloNext 대여소</span>
               <p className="text-sm text-gray-600 dark:text-gray-400 font-normal">실시간 현황</p>
             </div>
           </CardTitle>
