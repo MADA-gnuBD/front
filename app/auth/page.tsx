@@ -1,9 +1,8 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useRef, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,96 +10,104 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/contexts/auth-context"
-import AuthAPI from "@/api/authAPI"
-
 import { Bike, Mail, Lock, User, AlertCircle, Loader2 } from "lucide-react"
 import Link from "next/link"
 
 export default function AuthPage() {
   const [loginData, setLoginData] = useState({ email: "", password: "" })
-  const [registerData, setRegisterData] = useState({ email: "", password: "", name: "", confirmPassword: "" })
+  const [registerData, setRegisterData] = useState({
+    email: "",
+    password: "",
+    name: "",
+    confirmPassword: "",
+  })
+
   const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
+  const [loginLoading, setLoginLoading] = useState(false)
+  const [registerLoading, setRegisterLoading] = useState(false)
+
+  // 🔑 탭 제어 (쿼리스트링으로 초기 탭 제어)
+  const [activeTab, setActiveTab] = useState<"login" | "register">("login")
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    const mode = searchParams.get("mode")
+    const email = searchParams.get("email")
+    if (mode === "register" || mode === "login") {
+      setActiveTab(mode)
+    }
+    if (email) {
+      setLoginData((d) => ({ ...d, email }))
+    }
+  }, [searchParams])
+
   const { login, register } = useAuth()
   const router = useRouter()
 
-/* 로그인인
-  const handleLogin1 = async (e: React.FormEvent) => {
-   AuthAPI.login(loginData.email, loginData.password)
-  } 
-*/
+  // 중복 제출 가드
+  const busyRef = useRef(false)
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (busyRef.current || loginLoading) return
     setError("")
-    setLoading(true)
-
+    setLoginLoading(true)
+    busyRef.current = true
     try {
-      // AuthAPI를 사용하여 스프링 백엔드에 로그인 요청
-      const response = await AuthAPI.login(loginData.email, loginData.password)
-      
-      if (response.success && response.token) {
-        // 토큰을 localStorage에 저장
-        localStorage.setItem("auth_token", response.token)
-        if (response.user) {
-          localStorage.setItem("user_data", JSON.stringify(response.user))
-        }
-        
-        // 기존 useAuth의 login 함수도 호출하여 상태 업데이트
-        const success = await login(loginData.email, loginData.password)
-        if (success) {
-          router.push("/admin")
-        }
+      const ok = await login(loginData.email.trim(), loginData.password)
+      if (ok) {
+        router.replace("/admin")
       } else {
-        setError(response.message || "이메일 또는 비밀번호가 올바르지 않습니다.")
+        setError("이메일 또는 비밀번호가 올바르지 않습니다.")
       }
-    } catch (error) {
-      console.error("로그인 실패:", error)
-      setError("로그인 중 오류가 발생했습니다.")
+    } catch (err: any) {
+      console.error("로그인 실패:", err)
+      setError(err?.message || "로그인 중 오류가 발생했습니다.")
     } finally {
-      setLoading(false)
+      setLoginLoading(false)
+      setTimeout(() => (busyRef.current = false), 300)
     }
   }
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (busyRef.current || registerLoading) return
     setError("")
 
     if (registerData.password !== registerData.confirmPassword) {
       setError("비밀번호가 일치하지 않습니다.")
       return
     }
-
     if (registerData.password.length < 6) {
       setError("비밀번호는 6자 이상이어야 합니다.")
       return
     }
 
-    setLoading(true)
-
+    setRegisterLoading(true)
+    busyRef.current = true
     try {
-      // AuthAPI를 사용하여 스프링 백엔드에 회원가입 요청
-      const response = await AuthAPI.register(registerData.email, registerData.password, registerData.name)
-      
-      if (response.success && response.token) {
-        // 토큰을 localStorage에 저장
-        localStorage.setItem("auth_token", response.token)
-        if (response.user) {
-          localStorage.setItem("user_data", JSON.stringify(response.user))
-        }
-        
-        // 기존 useAuth의 register 함수도 호출하여 상태 업데이트
-        const success = await register(registerData.email, registerData.password, registerData.name)
-        if (success) {
-          router.push("/admin")
-        }
+      // ✅ 컨텍스트 register만 호출 (API 이중호출 제거)
+      const ok = await register(
+        registerData.email.trim(),
+        registerData.password,
+        registerData.name.trim(),
+      )
+
+      if (ok) {
+        // ✅ 회원가입 성공 → 로그인 탭으로 전환 + 이메일 프리필 + URL 정리
+        setActiveTab("login")
+        setLoginData({ email: registerData.email.trim(), password: "" })
+        setRegisterData({ email: "", password: "", name: "", confirmPassword: "" })
+        router.replace(`/auth?mode=login&email=${encodeURIComponent(registerData.email.trim())}`)
+        // 필요하면 여기서 토스트로 “회원가입 완료! 로그인 해주세요.” 표시
       } else {
-        setError(response.message || "회원가입에 실패했습니다. 이미 존재하는 이메일일 수 있습니다.")
+        setError("회원가입에 실패했습니다. 이미 존재하는 이메일일 수 있습니다.")
       }
-    } catch (error) {
-      console.error("회원가입 실패:", error)
-      setError("회원가입 중 오류가 발생했습니다.")
+    } catch (err: any) {
+      console.error("회원가입 실패:", err)
+      setError(err?.message || "회원가입 중 오류가 발생했습니다.")
     } finally {
-      setLoading(false)
+      setRegisterLoading(false)
+      setTimeout(() => (busyRef.current = false), 300)
     }
   }
 
@@ -127,7 +134,8 @@ export default function AuthPage() {
               <CardTitle className="text-center text-xl">로그인 / 회원가입</CardTitle>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="login" className="w-full">
+              {/* ✅ Tabs를 제어 모드로 변경 */}
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "login" | "register")} className="w-full">
                 <TabsList className="grid w-full grid-cols-2 glass-effect border-0">
                   <TabsTrigger
                     value="login"
@@ -151,7 +159,7 @@ export default function AuthPage() {
                 )}
 
                 <TabsContent value="login" className="space-y-4 mt-6">
-                  <form onSubmit={handleLogin} className="space-y-4">
+                  <form onSubmit={handleLogin} className="space-y-4" noValidate>
                     <div className="space-y-2">
                       <Label htmlFor="login-email">이메일</Label>
                       <div className="relative">
@@ -163,6 +171,7 @@ export default function AuthPage() {
                           value={loginData.email}
                           onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
                           className="pl-10 glass-effect border-0 bg-white/50"
+                          autoComplete="email"
                           required
                         />
                       </div>
@@ -178,16 +187,17 @@ export default function AuthPage() {
                           value={loginData.password}
                           onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
                           className="pl-10 glass-effect border-0 bg-white/50"
+                          autoComplete="current-password"
                           required
                         />
                       </div>
                     </div>
                     <Button
                       type="submit"
-                      disabled={loading}
-                      className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+                      disabled={loginLoading}
+                      className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-60"
                     >
-                      {loading ? (
+                      {loginLoading ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                           로그인 중...
@@ -200,7 +210,7 @@ export default function AuthPage() {
                 </TabsContent>
 
                 <TabsContent value="register" className="space-y-4 mt-6">
-                  <form onSubmit={handleRegister} className="space-y-4">
+                  <form onSubmit={handleRegister} className="space-y-4" noValidate>
                     <div className="space-y-2">
                       <Label htmlFor="register-name">이름</Label>
                       <div className="relative">
@@ -212,6 +222,7 @@ export default function AuthPage() {
                           value={registerData.name}
                           onChange={(e) => setRegisterData({ ...registerData, name: e.target.value })}
                           className="pl-10 glass-effect border-0 bg-white/50"
+                          autoComplete="name"
                           required
                         />
                       </div>
@@ -227,6 +238,7 @@ export default function AuthPage() {
                           value={registerData.email}
                           onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
                           className="pl-10 glass-effect border-0 bg-white/50"
+                          autoComplete="email"
                           required
                         />
                       </div>
@@ -242,7 +254,9 @@ export default function AuthPage() {
                           value={registerData.password}
                           onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
                           className="pl-10 glass-effect border-0 bg-white/50"
+                          autoComplete="new-password"
                           required
+                          minLength={6}
                         />
                       </div>
                     </div>
@@ -255,18 +269,22 @@ export default function AuthPage() {
                           type="password"
                           placeholder="비밀번호를 다시 입력하세요"
                           value={registerData.confirmPassword}
-                          onChange={(e) => setRegisterData({ ...registerData, confirmPassword: e.target.value })}
+                          onChange={(e) =>
+                            setRegisterData({ ...registerData, confirmPassword: e.target.value })
+                          }
                           className="pl-10 glass-effect border-0 bg-white/50"
+                          autoComplete="new-password"
                           required
+                          minLength={6}
                         />
                       </div>
                     </div>
                     <Button
                       type="submit"
-                      disabled={loading}
-                      className="w-full bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+                      disabled={registerLoading}
+                      className="w-full bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-60"
                     >
-                      {loading ? (
+                      {registerLoading ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                           회원가입 중...

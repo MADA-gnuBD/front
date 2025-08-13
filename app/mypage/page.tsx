@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -16,7 +15,6 @@ import { useAuth } from "@/contexts/auth-context"
 import { useWorkHistory } from "@/contexts/work-history-context"
 import AuthAPI from "@/api/authAPI"
 import PostsAPI from "@/api/postsAPI"
-import WorkHistoryAPI from "@/api/workHistoryAPI"
 import {
   ArrowLeft,
   User,
@@ -33,16 +31,11 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 
-
-
 export default function MyPage() {
   const { user, loading, updateProfile, deleteAccount, logout } = useAuth()
-  const {
-    workHistory,
-    refreshWorkHistory,
-    loading: workHistoryLoading,
-  } = useWorkHistory()
+  const { workHistory, loading: workHistoryLoading } = useWorkHistory()
   const router = useRouter()
+
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -59,7 +52,7 @@ export default function MyPage() {
   const [userPosts, setUserPosts] = useState<any[]>([])
   const [postsLoading, setPostsLoading] = useState(false)
 
-  // 인증 체크 - 로그인하지 않은 사용자는 로그인 페이지로 리다이렉트
+  // 인증 체크
   useEffect(() => {
     if (!loading && !user) {
       router.push("/auth")
@@ -75,61 +68,24 @@ export default function MyPage() {
     }
   }, [user, loading, router])
 
-  // 사용자 게시글 가져오기
+  // 사용자 게시글
   const fetchUserPosts = async () => {
     if (!user) return
-
     setPostsLoading(true)
     try {
-      const token = localStorage.getItem("auth_token")
-      if (!token) {
-        console.error("토큰이 없습니다.")
-        return
-      }
-
-      console.log("📡 [MyPage] 사용자 게시글 요청 중...")
-      console.log("👤 [MyPage] 사용자 정보:", user)
-      console.log("👤 [MyPage] 사용자 이메일:", user.email)
-      console.log("👤 [MyPage] 사용자 ID:", user.id)
-
-      // PostsAPI를 사용하여 스프링 백엔드에서 전체 게시글 가져오기
       const data = await PostsAPI.getPosts({})
-      
-      console.log("📊 [MyPage] 받은 데이터:", data)
-      
-      // 🔥 데이터 구조 확인 및 수정
       const postsArray = Array.isArray(data) ? data : (data.content || [])
-      console.log("📊 [MyPage] postsArray:", postsArray)
-      console.log("📊 [MyPage] postsArray 길이:", postsArray.length)
-      
-      // 🔥 프론트엔드에서 사용자 게시글 필터링
-      const userPosts = postsArray.filter((post: any) => {
-        console.log("🔍 [MyPage] 게시글 정보:", {
-          postId: post.id,
-          postAuthor: post.author,
-          postAuthorId: post.authorId,
-          postAuthorName: post.authorName,
-          userEmail: user.email,
-          userID: user.id,
-          isMatch: post.author === user.email || post.authorId === user.id || post.authorName === user.name
-        })
-        return post.author === user.email || post.authorId === user.id || post.authorName === user.name
-      })
-      console.log("👤 [MyPage] 사용자 게시글 필터링 결과:", userPosts)
-      console.log("👤 [MyPage] 사용자 게시글 개수:", userPosts.length)
-      
-      const formattedPosts = userPosts.map((post: any) => ({
+      const mine = postsArray.filter(
+        (p: any) => p.author === user.email || p.authorId === user.id || p.authorName === user.name
+      )
+      const formatted = mine.map((post: any) => ({
         ...post,
         createdAt: new Date(post.createdAt),
         comments: post.comments?.length || 0,
       }))
-      
-      console.log("🔄 [MyPage] 변환된 게시글:", formattedPosts)
-      console.log("🔄 [MyPage] 변환된 게시글 길이:", formattedPosts.length)
-      
-      setUserPosts(formattedPosts)
-    } catch (error) {
-      console.error("Failed to fetch user posts:", error)
+      setUserPosts(formatted)
+    } catch (e) {
+      console.error("Failed to fetch user posts:", e)
     } finally {
       setPostsLoading(false)
     }
@@ -140,7 +96,7 @@ export default function MyPage() {
     setError("")
     setSuccess("")
 
-    // 비밀번호 변경 시 유효성 검사
+    // 비밀번호 변경 검증
     if (formData.newPassword) {
       if (formData.newPassword.length < 6) {
         setError("새 비밀번호는 6자 이상이어야 합니다.")
@@ -157,7 +113,6 @@ export default function MyPage() {
     }
 
     setUpdating(true)
-
     try {
       const token = localStorage.getItem("auth_token")
       if (!token) {
@@ -165,36 +120,33 @@ export default function MyPage() {
         return
       }
 
-      const updateData: any = {
+      const payload: any = {
         name: formData.name,
         email: formData.email,
       }
-
       if (formData.newPassword) {
-        updateData.currentPassword = formData.currentPassword
-        updateData.newPassword = formData.newPassword
+        payload.currentPassword = formData.currentPassword
+        payload.newPassword = formData.newPassword
       }
 
-      // AuthAPI를 사용하여 스프링 백엔드에 프로필 업데이트 요청
-      const response = await AuthAPI.updateProfile(updateData, token)
-      
-      if (response.success) {
-        setSuccess("프로필이 성공적으로 업데이트되었습니다.")
-        setFormData({
-          ...formData,
-          currentPassword: "",
-          newPassword: "",
-          confirmPassword: "",
-        })
-        
-        // 기존 useAuth의 updateProfile 함수도 호출하여 상태 업데이트
-        await updateProfile(updateData)
-      } else {
-        setError(response.message || "프로필 업데이트에 실패했습니다.")
+      // ✅ 성공 시 예외 없이 반환되므로 success 플래그 의존 X
+      const updated: any = await AuthAPI.updateProfile(payload, token)
+
+      // 서버가 갱신된 사용자 정보를 돌려주면 반영
+      const mergedUser = {
+        id: updated?.id ?? user?.id,
+        email: updated?.email ?? payload.email,
+        name: updated?.name ?? payload.name,
+        role: updated?.role ?? user?.role,
       }
-    } catch (error) {
-      console.error("프로필 업데이트 실패:", error)
-      setError("프로필 업데이트 중 오류가 발생했습니다.")
+      localStorage.setItem("user_data", JSON.stringify(mergedUser))
+      await updateProfile(mergedUser)
+
+      setSuccess("프로필이 성공적으로 업데이트되었습니다.")
+      setFormData((prev) => ({ ...prev, currentPassword: "", newPassword: "", confirmPassword: "" }))
+    } catch (err: any) {
+      console.error("프로필 업데이트 실패:", err)
+      setError(err?.message || "프로필 업데이트에 실패했습니다.")
     } finally {
       setUpdating(false)
     }
@@ -208,30 +160,20 @@ export default function MyPage() {
 
     setDeleting(true)
     setError("")
-
     try {
       const token = localStorage.getItem("auth_token")
       if (!token) {
         setError("로그인이 필요합니다.")
         return
       }
-
-      // AuthAPI를 사용하여 스프링 백엔드에 계정 삭제 요청
-      const response = await AuthAPI.deleteAccount(token)
-      
-      if (response.success) {
-        alert("회원탈퇴가 완료되었습니다.")
-        
-        // 기존 useAuth의 deleteAccount 함수도 호출하여 상태 업데이트
-        await deleteAccount()
-        logout()
-        router.push("/")
-      } else {
-        setError(response.message || "회원탈퇴에 실패했습니다.")
-      }
-    } catch (error) {
-      console.error("회원탈퇴 실패:", error)
-      setError("회원탈퇴 중 오류가 발생했습니다.")
+      await AuthAPI.deleteAccount(token)
+      alert("회원탈퇴가 완료되었습니다.")
+      await deleteAccount()
+      logout()
+      router.push("/")
+    } catch (err: any) {
+      console.error("회원탈퇴 실패:", err)
+      setError(err?.message || "회원탈퇴에 실패했습니다.")
     } finally {
       setDeleting(false)
       setShowDeleteDialog(false)
@@ -249,30 +191,14 @@ export default function MyPage() {
     return categories[category as keyof typeof categories] || category
   }
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString("ko-KR", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    })
-  }
+  const formatDate = (date: Date) =>
+    date.toLocaleDateString("ko-KR", { year: "numeric", month: "short", day: "numeric" })
 
-  const formatDateTime = (date: Date) => {
-    return date.toLocaleDateString("ko-KR", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  }
+  const formatDateTime = (date: Date) =>
+    date.toLocaleDateString("ko-KR", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
 
-  const handlePostClick = (postId: string) => {
-    // 커뮤니티 페이지로 이동하면서 해당 글을 선택하도록 쿼리 파라미터 추가
-    router.push(`/community?postId=${postId}`)
-  }
+  const handlePostClick = (postId: string) => router.push(`/community?postId=${postId}`)
 
-  // 사용자별 작업 내역 필터링
   const userWorkHistory = user ? workHistory.filter((item) => item.userId === user.email) : []
   const emergencyWorkHistory = userWorkHistory.filter((item) => item.action.includes("긴급"))
   const normalWorkHistory = userWorkHistory.filter((item) => !item.action.includes("긴급"))
@@ -287,10 +213,7 @@ export default function MyPage() {
       </div>
     )
   }
-
-  if (!user) {
-    return null // 리다이렉트 처리 중
-  }
+  if (!user) return null
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
@@ -321,7 +244,7 @@ export default function MyPage() {
 
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
-          {/* 사용자 정보 요약 */}
+          {/* 요약 */}
           <Card className="glass-effect border-0 shadow-xl mb-8">
             <CardContent className="p-6">
               <div className="flex items-center gap-6">
@@ -332,9 +255,7 @@ export default function MyPage() {
                   <h2 className="text-2xl font-bold text-gray-800 mb-2">{user.name}</h2>
                   <p className="text-gray-600 mb-3">{user.email}</p>
                   <div className="flex gap-3">
-                    <Badge
-                      className={user.role === "admin" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}
-                    >
+                    <Badge className={user.role === "admin" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}>
                       {user.role === "admin" ? "관리자" : "일반 사용자"}
                     </Badge>
                   </div>
@@ -359,7 +280,7 @@ export default function MyPage() {
             </CardContent>
           </Card>
 
-          {/* 탭 메뉴 */}
+          {/* 탭 */}
           <Tabs defaultValue="profile" className="space-y-6">
             <TabsList className="grid w-full grid-cols-4 glass-effect border-0 p-1">
               <TabsTrigger
@@ -392,7 +313,7 @@ export default function MyPage() {
               </TabsTrigger>
             </TabsList>
 
-            {/* 프로필 설정 탭 */}
+            {/* 프로필 설정 */}
             <TabsContent value="profile">
               <Card className="glass-effect border-0 shadow-xl">
                 <CardHeader className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-b border-white/20">
@@ -410,7 +331,6 @@ export default function MyPage() {
                       <AlertDescription className="text-red-800">{error}</AlertDescription>
                     </Alert>
                   )}
-
                   {success && (
                     <Alert className="mb-6 border-green-200 bg-green-50">
                       <CheckCircle className="h-4 w-4 text-green-600" />
@@ -524,7 +444,7 @@ export default function MyPage() {
               </Card>
             </TabsContent>
 
-            {/* 내가 쓴 글 탭 */}
+            {/* 내가 쓴 글 */}
             <TabsContent value="posts">
               <Card className="glass-effect border-0 shadow-xl">
                 <CardHeader className="bg-gradient-to-r from-green-500/10 to-green-600/10 border-b border-white/20">
@@ -582,7 +502,7 @@ export default function MyPage() {
               </Card>
             </TabsContent>
 
-            {/* 작업내역 탭 */}
+            {/* 작업내역 */}
             <TabsContent value="work-history">
               <Card className="glass-effect border-0 shadow-xl">
                 <CardHeader className="bg-gradient-to-r from-purple-500/10 to-purple-600/10 border-b border-white/20">
@@ -616,7 +536,6 @@ export default function MyPage() {
                       </TabsTrigger>
                     </TabsList>
 
-                    {/* 전체 작업 내역 */}
                     <TabsContent value="all" className="mt-4">
                       {workHistoryLoading ? (
                         <div className="text-center py-12">
@@ -651,9 +570,7 @@ export default function MyPage() {
                                     {work.stationName}
                                   </h4>
                                   <p className="text-sm text-gray-600 mb-2">대여소 ID: {work.stationId}</p>
-                                  {work.notes && (
-                                    <p className="text-sm text-gray-700 bg-gray-50 rounded p-2">📝 {work.notes}</p>
-                                  )}
+                                  {work.notes && <p className="text-sm text-gray-700 bg-gray-50 rounded p-2">📝 {work.notes}</p>}
                                 </div>
                               </div>
                             </div>
@@ -662,7 +579,6 @@ export default function MyPage() {
                       )}
                     </TabsContent>
 
-                    {/* 긴급 작업 내역 */}
                     <TabsContent value="emergency" className="mt-4">
                       {workHistoryLoading ? (
                         <div className="text-center py-12">
@@ -697,9 +613,7 @@ export default function MyPage() {
                                     {work.stationName}
                                   </h4>
                                   <p className="text-sm text-gray-600 mb-2">대여소 ID: {work.stationId}</p>
-                                  {work.notes && (
-                                    <p className="text-sm text-gray-700 bg-gray-50 rounded p-2">📝 {work.notes}</p>
-                                  )}
+                                  {work.notes && <p className="text-sm text-gray-700 bg-gray-50 rounded p-2">📝 {work.notes}</p>}
                                 </div>
                               </div>
                             </div>
@@ -708,11 +622,10 @@ export default function MyPage() {
                       )}
                     </TabsContent>
 
-                    {/* 일반 작업 내역 */}
                     <TabsContent value="normal" className="mt-4">
                       {workHistoryLoading ? (
                         <div className="text-center py-12">
-                          <Loader2 className="w-12 h-12 text-purple-600 mx-auto mb-4 animate-spin" />
+                          <CheckCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                           <h3 className="text-lg font-semibold text-gray-600">작업 내역을 불러오는 중...</h3>
                         </div>
                       ) : normalWorkHistory.length === 0 ? (
@@ -743,9 +656,7 @@ export default function MyPage() {
                                     {work.stationName}
                                   </h4>
                                   <p className="text-sm text-gray-600 mb-2">대여소 ID: {work.stationId}</p>
-                                  {work.notes && (
-                                    <p className="text-sm text-gray-700 bg-gray-50 rounded p-2">📝 {work.notes}</p>
-                                  )}
+                                  {work.notes && <p className="text-sm text-gray-700 bg-gray-50 rounded p-2">📝 {work.notes}</p>}
                                 </div>
                               </div>
                             </div>
@@ -758,7 +669,7 @@ export default function MyPage() {
               </Card>
             </TabsContent>
 
-            {/* 계정 관리 탭 */}
+            {/* 계정 관리 */}
             <TabsContent value="danger">
               <Card className="glass-effect border-0 shadow-xl border-red-200">
                 <CardHeader className="bg-gradient-to-r from-red-500/10 to-red-600/10 border-b border-red-200">
