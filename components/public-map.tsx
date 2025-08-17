@@ -212,10 +212,12 @@ export function PublicMap() {
                     <p className="text-sm text-gray-600 mb-1">이용 가능한 자전거</p>
                     <p className="text-2xl font-bold text-blue-600">{selectedStation.parkingBikeTotCnt}대</p>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <p className="text-sm text-gray-600 mb-1">총 거치대</p>
-                    <p className="text-2xl font-bold text-gray-700">{selectedStation.rackTotCnt}개</p>
-                  </div>
+                  {selectedStation.rackTotCnt > 0 && (
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-sm text-gray-600 mb-1">총 거치대</p>
+                      <p className="text-2xl font-bold text-gray-700">{selectedStation.rackTotCnt}개</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>

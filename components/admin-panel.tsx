@@ -39,10 +39,12 @@ export function AdminPanel({
                   <p className="text-xs text-gray-600 mb-1">현재 자전거</p>
                   <p className="text-xl font-bold text-blue-600">{selectedStation.parkingBikeTotCnt}</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-600 mb-1">총 거치대</p>
-                  <p className="text-xl font-bold text-gray-700">{selectedStation.rackTotCnt}</p>
-                </div>
+                {selectedStation.rackTotCnt > 0 && (
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-600 mb-1">총 거치대</p>
+                    <p className="text-xl font-bold text-gray-700">{selectedStation.rackTotCnt}</p>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2">

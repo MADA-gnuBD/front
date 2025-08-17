@@ -176,7 +176,7 @@ export function KakaoMap({
         padding:10px 18px;min-width:${OVERLAY_W - 40}px;max-width:${OVERLAY_W}px;font-size:13px;color:#222;
         border:1px solid #d5d5d5;line-height:1.5;word-break:break-all;">
         <div style="font-weight:bold;margin-bottom:4px;">${station.stationName}</div>
-        <div>자전거 <b>${now}대</b> / 거치대 <b>${cap}대</b></div>
+        <div>자전거 <b>${now}대</b>${cap > 0 ? ` / 거치대 <b>${cap}대</b>` : ''}</div>
         ${
           hasPred
             ? `<div style="margin-top:6px;">
@@ -677,7 +677,7 @@ export function KakaoMap({
         padding:10px 18px;min-width:${OVERLAY_W - 40}px;max-width:${OVERLAY_W}px;font-size:13px;color:#222;
         border:1px solid #d5d5d5;line-height:1.5;word-break:break-all;">
         <div style="font-weight:bold;margin-bottom:4px;">${station.stationName}</div>
-        <div>자전거 <b>${now}대</b> / 거치대 <b>${cap}대</b></div>
+        <div>자전거 <b>${now}대</b>${cap > 0 ? ` / 거치대 <b>${cap}대</b>` : ''}</div>
         ${
           hasPred
             ? `<div style="margin-top:6px;">
@@ -1126,7 +1126,7 @@ export function KakaoMap({
         padding:10px 18px;min-width:${OVERLAY_W - 40}px;max-width:${OVERLAY_W}px;font-size:13px;color:#222;
         border:1px solid #d5d5d5;line-height:1.5;word-break:break-all;">
         <div style="font-weight:bold;margin-bottom:4px;">${station.stationName}</div>
-        <div>자전거 <b>${now}대</b> / 거치대 <b>${station.rackTotCnt ?? 0}대</b></div>
+        <div>자전거 <b>${now}대</b>${(station.rackTotCnt ?? 0) > 0 ? ` / 거치대 <b>${station.rackTotCnt ?? 0}대</b>` : ''}</div>
         ${
           hasPred
             ? `<div style="margin-top:6px;">
@@ -1596,7 +1596,7 @@ export function KakaoMap({
           <div style="font-weight:bold;margin-bottom:4px;">
             ${station.stationName}
           </div>
-          <div>자전거 ${station.parkingBikeTotCnt}대 / 거치대 ${station.rackTotCnt}대</div>
+          <div>자전거 ${station.parkingBikeTotCnt}대${station.rackTotCnt > 0 ? ` / 거치대 ${station.rackTotCnt}대` : ''}</div>
           ${hasPred ? `<div style="margin-top:6px;">
               <span style="font-weight:bold;">예측(60분):</span> ${predicted}대<br/>
               <span style="font-weight:bold;">예상 순재고:</span> ${netStock}대
