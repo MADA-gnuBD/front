@@ -8,7 +8,7 @@ import { WorkHistoryProvider } from "@/contexts/work-history-context"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "따릉이 관리 시스템",
+  title: "VeloNext",
   description: "서울시 따릉이 실시간 관리 및 커뮤니티 플랫폼",
 }
 

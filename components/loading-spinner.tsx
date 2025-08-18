@@ -13,7 +13,7 @@ export function LoadingSpinner() {
           <div className="absolute inset-0 w-20 h-20 border-4 border-blue-200 rounded-full animate-ping" />
         </div>
         <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-          따릉이 데이터 로딩 중...
+          VeloNext 데이터 로딩 중...
         </h2>
         <p className="text-gray-600 dark:text-gray-400">잠시만 기다려주세요</p>
 

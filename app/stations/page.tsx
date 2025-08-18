@@ -117,7 +117,7 @@ export default function StationsPage() {
                   <Bike className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-800">따릉이 실시간 현황</h1>
+                  <h1 className="text-2xl font-bold text-gray-800">VeloNext 실시간 현황</h1>
                   <p className="text-sm text-gray-600">대여소별 자전거 현황</p>
                 </div>
               </div>

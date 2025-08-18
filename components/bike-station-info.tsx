@@ -80,10 +80,12 @@ export function BikeStationInfo({ station, distance, isClosest, hasMostBikes }: 
 
         {/* Additional info */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
-            <p className="text-xs text-gray-500 mb-1">총 거치대</p>
-            <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">{station.rackTotCnt}</p>
-          </div>
+          {station.rackTotCnt > 0 && (
+            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+              <p className="text-xs text-gray-500 mb-1">총 거치대</p>
+              <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">{station.rackTotCnt}</p>
+            </div>
+          )}
 
           {distance !== undefined && (
             <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">

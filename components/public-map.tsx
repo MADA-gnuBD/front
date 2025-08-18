@@ -48,7 +48,7 @@ export function PublicMap() {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
         <div className="text-center">
           <Bike className="w-16 h-16 text-blue-600 mx-auto mb-4 animate-bounce" />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">따릉이 지도 로딩 중...</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">VeloNext 지도 로딩 중...</h2>
           <p className="text-gray-600">실시간 대여소 정보를 불러오고 있습니다</p>
         </div>
       </div>
@@ -66,7 +66,7 @@ export function PublicMap() {
                 <Bike className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-800">따릉이 실시간 현황</h1>
+                <h1 className="text-2xl font-bold text-gray-800">VeloNext 실시간 현황</h1>
                 <p className="text-sm text-gray-600">서울시 공공자전거 대여소 정보</p>
               </div>
             </div>
@@ -174,7 +174,7 @@ export function PublicMap() {
           <CardHeader className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-b border-white/20">
             <CardTitle className="flex items-center gap-3">
               <MapPin className="w-6 h-6 text-blue-600" />
-              따릉이 실시간 지도
+              VeloNext 실시간 지도
               <div className="ml-auto flex items-center gap-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                 <span className="text-sm text-gray-600">실시간</span>
@@ -212,10 +212,12 @@ export function PublicMap() {
                     <p className="text-sm text-gray-600 mb-1">이용 가능한 자전거</p>
                     <p className="text-2xl font-bold text-blue-600">{selectedStation.parkingBikeTotCnt}대</p>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <p className="text-sm text-gray-600 mb-1">총 거치대</p>
-                    <p className="text-2xl font-bold text-gray-700">{selectedStation.rackTotCnt}개</p>
-                  </div>
+                  {selectedStation.rackTotCnt > 0 && (
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-sm text-gray-600 mb-1">총 거치대</p>
+                      <p className="text-2xl font-bold text-gray-700">{selectedStation.rackTotCnt}개</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>
