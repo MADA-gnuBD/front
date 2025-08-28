@@ -37,7 +37,7 @@ const markerLegend = [
 const normId = (v: string | number | undefined | null) =>
   String(v ?? "").replace(/^ST-/, "").replace(/^0+/, "").trim();
 
-// ✅ SDK 로더
+// ✅ SDK 로더 (재시도 포함)
 function loadKakaoMaps(): Promise<any> {
   if (typeof window === "undefined") return Promise.reject(new Error("SSR"));
   if (window.kakao?.maps?.LatLng) return Promise.resolve(window.kakao);
@@ -45,11 +45,23 @@ function loadKakaoMaps(): Promise<any> {
 
   window.__kakaoLoaderPromise = new Promise((resolve, reject) => {
     const id = "kakao-map-sdk";
+
+    const waitForLatLng = (maxTries = 10, interval = 100) => {
+      let tries = 0;
+      const tick = () => {
+        if (window.kakao?.maps?.LatLng) return resolve(window.kakao);
+        if (++tries >= maxTries) return reject(new Error("kakao.maps.LatLng not ready after retries"));
+        setTimeout(tick, interval);
+      };
+      tick();
+    };
+
     const onReady = () => {
       try {
+        // maps.load 자체가 DOMContentLoaded 이후 실행을 보장하지만,
+        // 드물게 내부 객체가 늦게 붙는 경우가 있어 짧게 재확인
         window.kakao.maps.load(() => {
-          if (window.kakao?.maps?.LatLng) resolve(window.kakao);
-          else reject(new Error("kakao.maps.LatLng not ready"));
+          waitForLatLng();
         });
       } catch (e) {
         reject(e);
@@ -58,12 +70,12 @@ function loadKakaoMaps(): Promise<any> {
 
     const existing = document.getElementById(id) as HTMLScriptElement | null;
     if (existing) {
+      // 이미 붙어있다면 load가 있는지/없는지에 따라 처리
       if (window.kakao?.maps?.load) onReady();
       else existing.addEventListener("load", onReady, { once: true });
       return;
     }
 
-    // ⚠️ 환경변수 키 이름 확인: NEXT_PUBLIC_KAKAO_MAP_KEY 사용 중
     const appkey = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
     if (!appkey) {
       reject(new Error("NEXT_PUBLIC_KAKAO_MAP_KEY is missing"));
@@ -73,14 +85,16 @@ function loadKakaoMaps(): Promise<any> {
     const script = document.createElement("script");
     script.id = id;
     script.async = true;
+    // 필요 라이브러리는 그대로 유지
     script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appkey}&libraries=services,clusterer&autoload=false`;
-    script.onload = onReady;
-    script.onerror = () => reject(new Error("Failed to load Kakao Maps SDK"));
+    script.addEventListener("load", onReady, { once: true });
+    script.addEventListener("error", () => reject(new Error("Failed to load Kakao Maps SDK")), { once: true });
     document.head.appendChild(script);
   });
 
   return window.__kakaoLoaderPromise;
 }
+
 
 // ---------- 오버레이 배치 관련 상수 & 유틸 ----------
 const OVERLAY_W = 240; // 오버레이 가로(px) 추정
